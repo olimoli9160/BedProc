@@ -192,6 +192,78 @@ df = df.drop("Verschil_bedtijd_week", 1)
 df = df.drop("Verschil_bedtijd_5dagen", 1)
 df = df.drop("Verschil_bedtijd_weekend", 1)
 
+#--------Drop Individual External Affects per Day (External_geldig suffices for now)--------#
+df = df.drop("Slaapduur_dag1", 1)
+df = df.drop("TV_dag1", 1)
+df = df.drop("Computer_dag1", 1)
+df = df.drop("Huishoud_dag1",1)
+df = df.drop("Buitenshuis_dag1",1)
+df = df.drop("Sociaal_dag1",1)
+df = df.drop("Anders_dag1",1)
+df = df.drop("Bezigheid_dag1",1)
+df = df.drop("Extern_dag1",1)
+
+df = df.drop("Slaapduur_dag2", 1)
+df = df.drop("TV_dag2", 1)
+df = df.drop("Computer_dag2", 1)
+df = df.drop("Huishoud_dag2",1)
+df = df.drop("Buitenshuis_dag2",1)
+df = df.drop("Sociaal_dag2",1)
+df = df.drop("Anders_dag2",1)
+df = df.drop("Bezigheid_dag2",1)
+df = df.drop("Extern_dag2",1)
+
+df = df.drop("Slaapduur_dag3", 1)
+df = df.drop("TV_dag3", 1)
+df = df.drop("Computer_dag3", 1)
+df = df.drop("Huishoud_dag3",1)
+df = df.drop("Buitenshuis_dag3",1)
+df = df.drop("Sociaal_dag3",1)
+df = df.drop("Anders_dag3",1)
+df = df.drop("Bezigheid_dag3",1)
+df = df.drop("Extern_dag3",1)
+
+df = df.drop("Slaapduur_dag4", 1)
+df = df.drop("TV_dag4", 1)
+df = df.drop("Computer_dag4", 1)
+df = df.drop("Huishoud_dag4",1)
+df = df.drop("Buitenshuis_dag4",1)
+df = df.drop("Sociaal_dag4",1)
+df = df.drop("Anders_dag4",1)
+df = df.drop("Bezigheid_dag4",1)
+df = df.drop("Extern_dag4",1)
+
+df = df.drop("Slaapduur_dag5", 1)
+df = df.drop("TV_dag5", 1)
+df = df.drop("Computer_dag5", 1)
+df = df.drop("Huishoud_dag5",1)
+df = df.drop("Buitenshuis_dag5",1)
+df = df.drop("Sociaal_dag5",1)
+df = df.drop("Anders_dag5",1)
+df = df.drop("Bezigheid_dag5",1)
+df = df.drop("Extern_dag5",1)
+
+df = df.drop("Slaapduur_dag6", 1)
+df = df.drop("TV_dag6", 1)
+df = df.drop("Computer_dag6", 1)
+df = df.drop("Huishoud_dag6",1)
+df = df.drop("Buitenshuis_dag6",1)
+df = df.drop("Sociaal_dag6",1)
+df = df.drop("Anders_dag6",1)
+df = df.drop("Bezigheid_dag6",1)
+df = df.drop("Extern_dag6",1)
+
+df = df.drop("Slaapduur_dag7", 1)
+df = df.drop("TV_dag7", 1)
+df = df.drop("Computer_dag7", 1)
+df = df.drop("Huishoud_dag7",1)
+df = df.drop("Buitenshuis_dag7",1)
+df = df.drop("Sociaal_dag7",1)
+df = df.drop("Anders_dag7",1)
+df = df.drop("Bezigheid_dag7",1)
+df = df.drop("Extern_dag7",1)
+
+
 binaryAttributesToEncode = [
     "Nachtdienst",
     "Reason_nvt",
@@ -213,6 +285,42 @@ timeAttributesToEncode = [
     'Verschil_bedtijd_dag6',
     'Verschil_bedtijd_dag7']
 
+slaapAttributesWithEffectAttribute = [
+    ['Slaap1', 'Slaap1a'],
+    ['Slaap2', 'Slaap2a'],
+    ['Slaap3', 'Slaap3a'],
+    ['Slaap4', 'Slaap4a'],
+    ['Slaap5', 'Slaap5a']]
+
+
+bedtimeProcV2Attributes = [
+    "v2.bedproc1",
+    "v2.bedproc2",
+    "v2.bedproc3",
+    "v2.bedproc4",
+    "v2.bedproc5",
+    "v2.bedproc6",
+    "v2.bedproc7",
+    "v2.bedproc8",
+    "v2.bedproc9",
+    "v2.bedproc2_r",
+    "v2.bedproc3_r",
+    "v2.bedproc7_r",
+    "v2.bedproc9_r",
+    "v2.BedProc_SCALE"]
+
+actualProcrastinationPerDay = [
+    "Verschil_bedtijd_dag1",
+    "Verschil_bedtijd_dag2",
+    "Verschil_bedtijd_dag3",
+    "Verschil_bedtijd_dag4",
+    "Verschil_bedtijd_dag5",
+    "Verschil_bedtijd_dag6",
+    "Verschil_bedtijd_dag7",]
+
+
+#---------Encoding Data in Dataframe (when able)--------#
+
 def applyBinary(attribute):
     try:
         return int(attribute)
@@ -233,12 +341,33 @@ for attribute in binaryAttributesToEncode:
 for attribute in timeAttributesToEncode:
     df[attribute] = df[attribute].apply(lambda x: timeToMinutes(x))
 
-df = df.replace(r'\s+', np.nan, regex=True)
-print(df)
+
+#-----Missing Data Manipulation ---------#
+df = df.replace(r'\s+', np.nan, regex=True) #replace empty values (empty strings in this case) with NaN for easier identification
+
+for [att1, att2] in slaapAttributesWithEffectAttribute: # Map NaN multipliers with survey response
+    range = df[att1].values.tolist()
+    numericRange = [int(s) for s in range if s >= 0]
+    min = np.nanmin(numericRange)
+    df[att2] = df[att2].replace(np.nan, min)
+
+#for attribute in bedtimeProcV2Attributes:
+#     df = df.drop(attribute, 1)
+#print(df.shape)
+
+df = df.apply(pd.to_numeric) #ensure all data in frame is numeric
+
+for attribute in actualProcrastinationPerDay: # removal of listings which have missing bedtime proc values
+    df = df[pd.notnull(df[attribute])]
+
+# drop remaining listings with null data (Total listings go from 2637 to 1226, 46.5% of te original set retained)
 df = df.dropna()
-print(df.shape)
 
 
+#----- New features and replicating individual listings for each of the 7 days------#
+df = pd.concat([df]*7, ignore_index=True)
+df = df.sort(columns="nomem_encr")
+df = df.reset_index(drop=True)
 
 
 #-----------------------------Split Dataframe into Train and Test Sets------------------------------#
