@@ -368,8 +368,22 @@ df = df.dropna()
 df = pd.concat([df]*7, ignore_index=True)
 df = df.sort(columns="nomem_encr")
 df = df.reset_index(drop=True)
+#df.index = np.arange(1,len(df)+1) #Make index start from 1 instead of 0, easier (for me) to increment over dataframe
 
+df["Proc_soFar"] = 0
 
+firstParticipant = df.loc[:6]
+print(firstParticipant)
+
+proc = 0
+day = 0
+while day < 7:
+    firstParticipant.ix[day, "Proc_soFar"] = proc
+    proc += float(firstParticipant.iloc[[day]][actualProcrastinationPerDay[day]].values)
+    print(proc)
+    day += 1
+
+print(firstParticipant)
 #-----------------------------Split Dataframe into Train and Test Sets------------------------------#
 
 #train, test = train_test_split(df, train_size = 0.7)
