@@ -370,20 +370,40 @@ df = df.sort(columns="nomem_encr")
 df = df.reset_index(drop=True)
 #df.index = np.arange(1,len(df)+1) #Make index start from 1 instead of 0, easier (for me) to increment over dataframe
 
-df["Proc_soFar"] = 0
+df["Proc_soFar"] = 0 # float feature calculating total amount procrastinated up until current day
+df["Procrastinated_Prev_Day"] = 0 # binary feature indicating whether participant procrastinated previous day (1) or not (0)
 
-firstParticipant = df.loc[:6]
-print(firstParticipant)
+copy_df = df.copy(deep=True)
 
-proc = 0
-day = 0
-while day < 7:
-    firstParticipant.ix[day, "Proc_soFar"] = proc
-    proc += float(firstParticipant.iloc[[day]][actualProcrastinationPerDay[day]].values)
-    print(proc)
-    day += 1
+def rebuild_with_Derived_Proc_Features(data):
+    altered = 0 #refers to index of entry currently being altered
+    participants = data.shape[0]
+    dfs = [] #array which will hold splits of dataset
 
-print(firstParticipant)
+    while altered < participants: # while loop to split the dataset by every 7 entries and...
+        current = data[:7]
+        data = data[7:]
+        proc = 0
+        day = 0
+        prevProc = 0.0
+
+        while day < 7:
+            current.ix[altered, "Proc_soFar"] = proc #....set value for current listing based on proc's value
+            if proc != prevProc:
+                current.ix[altered, "Procrastinated_Prev_Day"] = 1 #... set binary feature according to prev day's proc
+            prevProc = proc
+            proc += float(current.iloc[[day]][actualProcrastinationPerDay[day]].values) # increase proc by current day's actual proc value
+            altered += 1 # current entry alteration finished, increment to next
+            day += 1
+
+        dfs.append(current)
+
+    return pd.concat(dfs) #rebuild dataset from splits
+
+#print(df)
+df = rebuild_with_Derived_Proc_Features(copy_df)
+print(df)
+
 #-----------------------------Split Dataframe into Train and Test Sets------------------------------#
 
 #train, test = train_test_split(df, train_size = 0.7)
