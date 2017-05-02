@@ -1,5 +1,7 @@
+# encoding: utf-8
+
 import numpy as np  # linear algebra library
-import xgboost as xgb  # ensemble boosted tree model (don't have to import this yet!)
+# import xgboost as xgb  # ensemble boosted tree model (don't have to import this yet!)
 import pandas as pd  # data processing library, converts data into data frames and allows for manipulation of these frames
 import sklearn as sk
 from sklearn.cross_validation import train_test_split
@@ -7,6 +9,7 @@ from sklearn.cross_validation import KFold
 import time
 import datetime
 import matplotlib as plt
+import os
 
 #TARGET = "Verschil_bedtijd_dag1"
 #NFOLDS = 5
@@ -17,8 +20,8 @@ pd.set_option('expand_frame_repr', False)  # shows dataframe without wrapping to
 pd.set_option('chained_assignment', None)
 pd.set_option('display.max_columns', 500)
 
-data_path = "C:/Users/Michael/Desktop/BachelorThesis/"  # my working directory
-data_file = data_path + "LISS_bedtime.csv"
+__location__ = os.path.realpath(os.path.join(os.getcwd(), os.path.dirname(__file__)))
+data_file = os.path.join(__location__, 'LISS_bedtime.csv')
 
 df = pd.read_csv(data_file)
 #print(df)
