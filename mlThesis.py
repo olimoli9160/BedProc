@@ -1,11 +1,10 @@
 # encoding: utf-8
 
 import numpy as np  # linear algebra library
-# import xgboost as xgb  # ensemble boosted tree model (don't have to import this yet!)
+import xgboost as xgb  # ensemble boosted tree model (don't have to import this yet!)
 import pandas as pd  # data processing library, converts data into data frames and allows for manipulation of these frames
 import sklearn as sk
-from sklearn.cross_validation import train_test_split
-from sklearn.cross_validation import KFold
+from sklearn.model_selection import train_test_split, KFold
 import time
 import datetime
 import matplotlib as plt
@@ -38,6 +37,7 @@ df = df.drop("brutohh_f", 1)
 df = df.drop("nettohh_f", 1)
 
 #----- Drop Survey Specific Responses (Not Predictors) -----#
+df = df.drop("im13a001", 1)
 df = df.drop("im13a_m", 1)
 df = df.drop("Vragenmoeilijk", 1)
 df = df.drop("Vragenduidelijk", 1)
@@ -195,77 +195,6 @@ df = df.drop("Verschil_bedtijd_week", 1)
 df = df.drop("Verschil_bedtijd_5dagen", 1)
 df = df.drop("Verschil_bedtijd_weekend", 1)
 
-#--------Drop Individual External Affects per Day (External_geldig suffices for now)--------#
-df = df.drop("Slaapduur_dag1", 1)
-df = df.drop("TV_dag1", 1)
-df = df.drop("Computer_dag1", 1)
-df = df.drop("Huishoud_dag1",1)
-df = df.drop("Buitenshuis_dag1",1)
-df = df.drop("Sociaal_dag1",1)
-df = df.drop("Anders_dag1",1)
-df = df.drop("Bezigheid_dag1",1)
-df = df.drop("Extern_dag1",1)
-
-df = df.drop("Slaapduur_dag2", 1)
-df = df.drop("TV_dag2", 1)
-df = df.drop("Computer_dag2", 1)
-df = df.drop("Huishoud_dag2",1)
-df = df.drop("Buitenshuis_dag2",1)
-df = df.drop("Sociaal_dag2",1)
-df = df.drop("Anders_dag2",1)
-df = df.drop("Bezigheid_dag2",1)
-df = df.drop("Extern_dag2",1)
-
-df = df.drop("Slaapduur_dag3", 1)
-df = df.drop("TV_dag3", 1)
-df = df.drop("Computer_dag3", 1)
-df = df.drop("Huishoud_dag3",1)
-df = df.drop("Buitenshuis_dag3",1)
-df = df.drop("Sociaal_dag3",1)
-df = df.drop("Anders_dag3",1)
-df = df.drop("Bezigheid_dag3",1)
-df = df.drop("Extern_dag3",1)
-
-df = df.drop("Slaapduur_dag4", 1)
-df = df.drop("TV_dag4", 1)
-df = df.drop("Computer_dag4", 1)
-df = df.drop("Huishoud_dag4",1)
-df = df.drop("Buitenshuis_dag4",1)
-df = df.drop("Sociaal_dag4",1)
-df = df.drop("Anders_dag4",1)
-df = df.drop("Bezigheid_dag4",1)
-df = df.drop("Extern_dag4",1)
-
-df = df.drop("Slaapduur_dag5", 1)
-df = df.drop("TV_dag5", 1)
-df = df.drop("Computer_dag5", 1)
-df = df.drop("Huishoud_dag5",1)
-df = df.drop("Buitenshuis_dag5",1)
-df = df.drop("Sociaal_dag5",1)
-df = df.drop("Anders_dag5",1)
-df = df.drop("Bezigheid_dag5",1)
-df = df.drop("Extern_dag5",1)
-
-df = df.drop("Slaapduur_dag6", 1)
-df = df.drop("TV_dag6", 1)
-df = df.drop("Computer_dag6", 1)
-df = df.drop("Huishoud_dag6",1)
-df = df.drop("Buitenshuis_dag6",1)
-df = df.drop("Sociaal_dag6",1)
-df = df.drop("Anders_dag6",1)
-df = df.drop("Bezigheid_dag6",1)
-df = df.drop("Extern_dag6",1)
-
-df = df.drop("Slaapduur_dag7", 1)
-df = df.drop("TV_dag7", 1)
-df = df.drop("Computer_dag7", 1)
-df = df.drop("Huishoud_dag7",1)
-df = df.drop("Buitenshuis_dag7",1)
-df = df.drop("Sociaal_dag7",1)
-df = df.drop("Anders_dag7",1)
-df = df.drop("Bezigheid_dag7",1)
-df = df.drop("Extern_dag7",1)
-
 
 binaryAttributesToEncode = [
     "Nachtdienst",
@@ -318,9 +247,61 @@ actualProcrastinationPerDay = [
     "Verschil_bedtijd_dag3",
     "Verschil_bedtijd_dag4",
     "Verschil_bedtijd_dag5",
-    "Verschil_bedtijd_dag6",
-    "Verschil_bedtijd_dag7",]
+    "Verschil_bedtijd_dag6",  # weekend
+    "Verschil_bedtijd_dag7"] # weekend
 
+mediaAttributes = [
+    "TV_dag",
+    "Computer_dag"]
+
+dayAttributes = [
+    "Verschil_bedtijd_dag",
+    "Extern_dag",
+    "Slaapduur_dag",
+    "TV_dag",
+    "Computer_dag",
+    "Huishoud_dag",
+    "Buitenshuis_dag",
+    "Sociaal_dag",
+    "Anders_dag",
+    "Bezigheid_dag"]
+
+weekendAttributes = [
+    "Verschil_bedtijd_dag6",
+    "Extern_dag6",
+    "Extern_dag6_geldig",
+    "Slaapduur_dag6",
+    "TV_dag6",
+    "Computer_dag6",
+    "Huishoud_dag6",
+    "Buitenshuis_dag6",
+    "Sociaal_dag6",
+    "Anders_dag6",
+    "Bezigheid_dag6",
+    "Verschil_bedtijd_dag7",
+    "Extern_dag7",
+    "Extern_dag7_geldig",
+    "Slaapduur_dag7",
+    "TV_dag7",
+    "Computer_dag7",
+    "Huishoud_dag7",
+    "Buitenshuis_dag7",
+    "Sociaal_dag7",
+    "Anders_dag7",
+    "Bezigheid_dag7",
+    "slaapduur_weekend",
+    "Slaapuren_weekend",
+    "Slaapuren_weekend_voldoende"]
+
+def dropWeekend(dataframe):
+    for attribute in weekendAttributes:
+        dataframe = dataframe.drop(attribute, 1)
+    return dataframe
+
+def dropProcSurveyV2(dataframe):
+    for attribute in bedtimeProcV2Attributes:
+        dataframe = dataframe.drop(attribute, 1)
+    return dataframe
 
 #---------Encoding Data in Dataframe (when able)--------#
 
@@ -332,7 +313,7 @@ def applyBinary(attribute):
 
 def timeToMinutes(hhmmss):
     if hhmmss.strip():
-        [hours, minutes, seconds] = [int(x) for x in hhmmss.split(':')]
+        [hours, minutes, seconds] = [float(x) for x in hhmmss.split(':')]
         t = datetime.timedelta(hours=hours, minutes=minutes, seconds=seconds)
         return t.total_seconds() / 60
     else:
@@ -350,60 +331,65 @@ df = df.replace(r'\s+', np.nan, regex=True) #replace empty values (empty strings
 
 for [att1, att2] in slaapAttributesWithEffectAttribute: # Map NaN multipliers with survey response
     range = df[att1].values.tolist()
-    numericRange = [int(s) for s in range if s >= 0]
+    numericRange = [float(s) for s in range if float(s) >= 0]
     min = np.nanmin(numericRange)
     df[att2] = df[att2].replace(np.nan, min)
-
-#for attribute in bedtimeProcV2Attributes:
-#     df = df.drop(attribute, 1)
-#print(df.shape)
 
 df = df.apply(pd.to_numeric) #ensure all data in frame is numeric
 
 for attribute in actualProcrastinationPerDay: # removal of listings which have missing bedtime proc values
     df = df[pd.notnull(df[attribute])]
 
-# drop remaining listings with null data (Total listings go from 2637 to 1226, 46.5% of te original set retained)
+# drop remaining listings with null data (Total listings go from 2637 to 1220, 46.3% of te original set retained)
 df = df.dropna()
+print(df.shape)
 
+#------------------Optional Attribute Drops (used in iterative experimentation)--------------------#
+df = dropProcSurveyV2(df)
+df = dropWeekend(df)
+print(df.shape)
 
-#----- New features and replicating individual listings for each of the 7 days------#
-df = pd.concat([df]*7, ignore_index=True)
-df = df.sort(columns="nomem_encr")
+#----- New features and replicating individual listings for each of the 5 days------#
+df = pd.concat([df]*5, ignore_index=True) # number represents amount of days in week to check, change to 7 for full week
+df = df.sort_values(by="nomem_encr")
 df = df.reset_index(drop=True)
-#df.index = np.arange(1,len(df)+1) #Make index start from 1 instead of 0, easier (for me) to increment over dataframe
 
 df["Proc_soFar"] = 0 # float feature calculating total amount procrastinated up until current day
 df["Procrastinated_Prev_Day"] = 0 # binary feature indicating whether participant procrastinated previous day (1) or not (0)
-
-copy_df = df.copy(deep=True)
+df["Early_To_Bed_Prev"] = 0 # binary feature indicating whether participant went to sleep earlier than expected previous day
+df["Media_Usage"] = 0 # binary feature indicating whether participant used media before attempting to sleep
+df["Day_Number"] = 0
 
 def rebuild_with_Derived_Proc_Features(data):
     altered = 0 #refers to index of entry currently being altered
     participants = data.shape[0]
     dfs = [] #array which will hold splits of dataset
 
-    while altered < participants: # while loop to split the dataset by every 7 entries and...
-        current = data[:7]
-        data = data[7:]
+    while altered < participants: # while loop to split the dataset by every 5 entries and...
+        current = data[:5]
+        data = data[5:]
         proc = 0
         day = 0
         prevProc = 0.0
 
-        while day < 7:
+        while day < 5:
+            current.ix[altered, "Day_Number"] = day+1
             current.ix[altered, "Proc_soFar"] = proc #....set value for current listing based on proc's value
-            if proc != prevProc:
+            if proc != prevProc and proc > prevProc:
                 current.ix[altered, "Procrastinated_Prev_Day"] = 1 #... set binary feature according to prev day's proc
+            elif proc != prevProc and proc < prevProc:
+                current.ix[altered, "Early_To_Bed_Prev"] = 1 # set only if proc decreases day to day
+            if current.ix[altered, "TV_dag"+str(day+1)] > 0 or current.ix[altered, "Computer_dag"+str(day+1)] > 0:
+                current.ix[altered, "Media_Usage"] = 1
             prevProc = proc
             proc += float(current.iloc[[day]][actualProcrastinationPerDay[day]].values) # increase proc by current day's actual proc value
             altered += 1 # current entry alteration finished, increment to next
             day += 1
 
         dfs.append(current)
-
     return pd.concat(dfs) #rebuild dataset from splits
 
-#print(df)
+copy_df = df.copy(deep=True)
 df = rebuild_with_Derived_Proc_Features(copy_df)
 print(df)
 
