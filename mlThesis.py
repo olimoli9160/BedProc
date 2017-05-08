@@ -10,7 +10,7 @@ import datetime
 import matplotlib as plt
 import os
 
-#TARGET = "Verschil_bedtijd_dag1"
+#TARGET = "Verschil_bedtijd_dag"
 #NFOLDS = 5
 #SEED = 0
 #NROWS = None
@@ -224,6 +224,10 @@ slaapAttributesWithEffectAttribute = [
     ['Slaap4', 'Slaap4a'],
     ['Slaap5', 'Slaap5a']]
 
+#partnerAttributes = [
+#    "Bedtijd_partner_dag1",
+#    "Slaaptijd_partner_dag1",
+#    "Opstaan_partner"]
 
 bedtimeProcV2Attributes = [
     "v2.bedproc1",
@@ -342,12 +346,14 @@ for attribute in actualProcrastinationPerDay: # removal of listings which have m
 
 # drop remaining listings with null data (Total listings go from 2637 to 1220, 46.3% of te original set retained)
 df = df.dropna()
-print(df.shape)
+#print(df.shape)
+
 
 #------------------Optional Attribute Drops (used in iterative experimentation)--------------------#
 df = dropProcSurveyV2(df)
 df = dropWeekend(df)
-print(df.shape)
+#print(df.shape)
+
 
 #----- New features and replicating individual listings for each of the 5 days------#
 df = pd.concat([df]*5, ignore_index=True) # number represents amount of days in week to check, change to 7 for full week
@@ -361,9 +367,9 @@ df["Media_Usage"] = 0 # binary feature indicating whether participant used media
 df["Day_Number"] = 0
 
 def rebuild_with_Derived_Proc_Features(data):
-    altered = 0 #refers to index of entry currently being altered
+    altered = 0 # refers to index of entry currently being altered
     participants = data.shape[0]
-    dfs = [] #array which will hold splits of dataset
+    dfs = [] # array which will hold splits of dataset
 
     while altered < participants: # while loop to split the dataset by every 5 entries and...
         current = data[:5]
@@ -373,18 +379,30 @@ def rebuild_with_Derived_Proc_Features(data):
         prevProc = 0.0
 
         while day < 5:
+            dayString = str(day+1)
             current.ix[altered, "Day_Number"] = day+1
             current.ix[altered, "Proc_soFar"] = proc #....set value for current listing based on proc's value
+
             if proc != prevProc and proc > prevProc:
                 current.ix[altered, "Procrastinated_Prev_Day"] = 1 #... set binary feature according to prev day's proc
             elif proc != prevProc and proc < prevProc:
                 current.ix[altered, "Early_To_Bed_Prev"] = 1 # set only if proc decreases day to day
+
             if current.ix[altered, "TV_dag"+str(day+1)] > 0 or current.ix[altered, "Computer_dag"+str(day+1)] > 0:
                 current.ix[altered, "Media_Usage"] = 1
+
             prevProc = proc
             proc += float(current.iloc[[day]][actualProcrastinationPerDay[day]].values) # increase proc by current day's actual proc value
-            altered += 1 # current entry alteration finished, increment to next
-            day += 1
+
+            for attribute in dayAttributes: # introduces general attribute in place of specific day attributes,
+                                            # reducing dataset column size and improving readability
+                actualAttributeString = attribute + dayString
+                attributeValue = float(current.iloc[[day]][actualAttributeString].values)
+                current.ix[altered, attribute] = attributeValue # creates the new generic attribute and gives value of specific day
+                current = current.drop(actualAttributeString, 1) # removes now obsolete day attributes from each listing
+
+            altered += 1 # current entry alteration finished, increment to next full datset index
+            day += 1 # increments to next day of week
 
         dfs.append(current)
     return pd.concat(dfs) #rebuild dataset from splits
@@ -457,4 +475,3 @@ def get_oof(model): # get best set up out of folds of cross validation
 
 #xg = XgbWrapper(seed=SEED, params=xgb_params)
 #xg_oof_train, xg_oof_test = get_oof(xg)
-
