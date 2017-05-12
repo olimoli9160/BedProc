@@ -1,19 +1,9 @@
 # encoding: utf-8
 
 import numpy as np  # linear algebra library
-import xgboost as xgb  # ensemble boosted tree model (don't have to import this yet!)
 import pandas as pd  # data processing library, converts data into data frames and allows for manipulation of these frames
-import sklearn as sk
-from sklearn.model_selection import train_test_split, KFold
-import time
 import datetime
-import matplotlib as plt
 import os
-
-#TARGET = "Verschil_bedtijd_dag"
-#NFOLDS = 5
-#SEED = 0
-#NROWS = None
 
 pd.set_option('expand_frame_repr', False)  # shows dataframe without wrapping to next line
 pd.set_option('chained_assignment', None)
@@ -268,12 +258,14 @@ dayAttributes = [
     "Buitenshuis_dag",
     "Sociaal_dag",
     "Anders_dag",
-    "Bezigheid_dag"]
+    "Bezigheid_dag",
+    "Extern_geldig_dag",
+    "anticip_dag"]
 
 weekendAttributes = [
     "Verschil_bedtijd_dag6",
     "Extern_dag6",
-    "Extern_dag6_geldig",
+    "Extern_geldig_dag6",
     "Slaapduur_dag6",
     "TV_dag6",
     "Computer_dag6",
@@ -282,9 +274,10 @@ weekendAttributes = [
     "Sociaal_dag6",
     "Anders_dag6",
     "Bezigheid_dag6",
+    "anticip_dag6",
     "Verschil_bedtijd_dag7",
     "Extern_dag7",
-    "Extern_dag7_geldig",
+    "Extern_geldig_dag7",
     "Slaapduur_dag7",
     "TV_dag7",
     "Computer_dag7",
@@ -293,6 +286,7 @@ weekendAttributes = [
     "Sociaal_dag7",
     "Anders_dag7",
     "Bezigheid_dag7",
+    "anticip_dag7",
     "slaapduur_weekend",
     "Slaapuren_weekend",
     "Slaapuren_weekend_voldoende"]
@@ -318,10 +312,39 @@ def applyBinary(attribute):
 def timeToMinutes(hhmmss):
     if hhmmss.strip():
         [hours, minutes, seconds] = [float(x) for x in hhmmss.split(':')]
+        if hours < 0:
+            minutes *= -1
+            seconds *= -1
         t = datetime.timedelta(hours=hours, minutes=minutes, seconds=seconds)
         return t.total_seconds() / 60
     else:
         return np.NaN
+
+df["anticip_dag1"] = 0
+df["anticip_dag2"] = 0
+df["anticip_dag3"] = 0
+df["anticip_dag4"] = 0
+df["anticip_dag5"] = 0
+df["anticip_dag6"] = 0
+df["anticip_dag7"] = 0
+
+anticipAttributes = [
+    "anticip_dag1",
+    "anticip_dag2",
+    "anticip_dag3",
+    "anticip_dag4",
+    "anticip_dag5",
+    "anticip_dag6",
+    "anticip_dag7"]
+
+externGeldigAttributes = [
+    "Extern_dag1_geldig",
+    "Extern_dag2_geldig",
+    "Extern_dag3_geldig",
+    "Extern_dag4_geldig",
+    "Extern_dag5_geldig",
+    "Extern_dag6_geldig",
+    "Extern_dag7_geldig"]
 
 for attribute in binaryAttributesToEncode:
     df[attribute] = df[attribute].apply(lambda x: applyBinary(x))
@@ -329,6 +352,19 @@ for attribute in binaryAttributesToEncode:
 for attribute in timeAttributesToEncode:
     df[attribute] = df[attribute].apply(lambda x: timeToMinutes(x))
 
+dayNumber = 1
+for attribute in externGeldigAttributes: # rename feature for consistency
+    df["Extern_geldig_dag"+str(dayNumber)] = df[attribute]
+    dayNumber += 1
+    df = df.drop(attribute, 1)
+
+for attribute in actualProcrastinationPerDay: # outlier removal based on unlikely procrastination / anti-procrastination levels
+    while (1):
+        x = df[attribute].median()
+        ix = abs(df[attribute] - x) > (5 * df[attribute].std()) # removes outliers with a standard deviation 5 times the median difference (adjustable)
+        if ix.sum() == 0:  # no more outliers -> stop
+            break
+        df.loc[ix, attribute] = np.nan  # exclude outliers
 
 #-----Missing Data Manipulation ---------#
 df = df.replace(r'\s+', np.nan, regex=True) #replace empty values (empty strings in this case) with NaN for easier identification
@@ -344,27 +380,24 @@ df = df.apply(pd.to_numeric) #ensure all data in frame is numeric
 for attribute in actualProcrastinationPerDay: # removal of listings which have missing bedtime proc values
     df = df[pd.notnull(df[attribute])]
 
-# drop remaining listings with null data (Total listings go from 2637 to 1220, 46.3% of te original set retained)
+# drop remaining listings with null data (Total listings go from 2637 to 1159, 43.95% of the original set retained)
 df = df.dropna()
-#print(df.shape)
-
+print(df.shape)
 
 #------------------Optional Attribute Drops (used in iterative experimentation)--------------------#
 df = dropProcSurveyV2(df)
 df = dropWeekend(df)
-#print(df.shape)
-
 
 #----- New features and replicating individual listings for each of the 5 days------#
 df = pd.concat([df]*5, ignore_index=True) # number represents amount of days in week to check, change to 7 for full week
 df = df.sort_values(by="nomem_encr")
 df = df.reset_index(drop=True)
 
-df["Proc_soFar"] = 0 # float feature calculating total amount procrastinated up until current day
-df["Procrastinated_Prev_Day"] = 0 # binary feature indicating whether participant procrastinated previous day (1) or not (0)
-df["Early_To_Bed_Prev"] = 0 # binary feature indicating whether participant went to sleep earlier than expected previous day
-df["Media_Usage"] = 0 # binary feature indicating whether participant used media before attempting to sleep
-df["Day_Number"] = 0
+df["Proc_soFar_dag"] = 0 # float feature calculating total amount procrastinated up until current day
+df["Procrastinated_Prev_dag"] = 0 # binary feature indicating whether participant procrastinated previous day (1) or not (0)
+df["Early_To_Bed_Prev_dag"] = 0 # binary feature indicating whether participant went to sleep earlier than expected previous day
+df["Media_Usage_dag"] = 0 # binary feature indicating whether participant used media before attempting to sleep
+df["dag_Number"] = 0
 
 def rebuild_with_Derived_Proc_Features(data):
     altered = 0 # refers to index of entry currently being altered
@@ -374,25 +407,33 @@ def rebuild_with_Derived_Proc_Features(data):
     while altered < participants: # while loop to split the dataset by every 5 entries and...
         current = data[:5]
         data = data[5:]
-        proc = 0
+        currentProc = 0
         day = 0
         prevProc = 0.0
+        totalProc = 0
 
         while day < 5:
             dayString = str(day+1)
-            current.ix[altered, "Day_Number"] = day+1
-            current.ix[altered, "Proc_soFar"] = proc #....set value for current listing based on proc's value
+            current.ix[altered, "dag_Number"] = day+1
+            current.ix[altered, "Proc_soFar_dag"] = totalProc #....set value for current listing based on proc's value
 
-            if proc != prevProc and proc > prevProc:
-                current.ix[altered, "Procrastinated_Prev_Day"] = 1 #... set binary feature according to prev day's proc
-            elif proc != prevProc and proc < prevProc:
-                current.ix[altered, "Early_To_Bed_Prev"] = 1 # set only if proc decreases day to day
+            if currentProc != prevProc and currentProc > prevProc:
+                current.ix[altered, "Procrastinated_Prev_dag"] = 1 #... set binary feature according to prev day's proc
+
+            elif currentProc != prevProc and currentProc < prevProc:
+                current.ix[altered, "Early_To_Bed_Prev_dag"] = 1 # set only if proc decreases day to day
 
             if current.ix[altered, "TV_dag"+str(day+1)] > 0 or current.ix[altered, "Computer_dag"+str(day+1)] > 0:
-                current.ix[altered, "Media_Usage"] = 1
+                current.ix[altered, "Media_Usage_dag"] = 1
 
-            prevProc = proc
-            proc += float(current.iloc[[day]][actualProcrastinationPerDay[day]].values) # increase proc by current day's actual proc value
+            prevProc = currentProc
+            currentProc += float(current.iloc[[day]][actualProcrastinationPerDay[day]].values) # increase proc by current day's actual proc value
+
+            if current.ix[altered, actualProcrastinationPerDay[day]] < 0: # Separate days procrastinated from days not
+                current.ix[altered, anticipAttributes[day]] = (current.ix[altered, actualProcrastinationPerDay[day]] * -1)
+                current.ix[altered, actualProcrastinationPerDay[day]] = 0
+
+            totalProc += float(current.iloc[[day]][actualProcrastinationPerDay[day]].values) # increase total proc so far based on days procrastinated
 
             for attribute in dayAttributes: # introduces general attribute in place of specific day attributes,
                                             # reducing dataset column size and improving readability
@@ -409,69 +450,5 @@ def rebuild_with_Derived_Proc_Features(data):
 
 copy_df = df.copy(deep=True)
 df = rebuild_with_Derived_Proc_Features(copy_df)
-print(df)
-
-#-----------------------------Split Dataframe into Train and Test Sets------------------------------#
-
-#train, test = train_test_split(df, train_size = 0.7)
-
-#ntrain = train.shape[0]
-#ntest = test.shape[0]
-
-#x_train = np.array(df[:train.shape[0]])
-#x_test = np.array(df[train.shape[0]:])
-
-#y_train = np.log(train[TARGET]+1)
-#train.drop([TARGET], axis=1, inplace=True)
-#kf = KFold(ntrain, n_folds=NFOLDS, shuffle=True, random_state=SEED)
-
-
-
-#------ Model Training -------#
-class XgbWrapper(object):
-    def __init__(self, seed=0, params=None):
-        self.param = params
-        self.param['seed'] = seed
-        self.nrounds = params.pop('nrounds', 250)
-
-    def train(self, x_train, y_train):
-        dtrain = xgb.DMatrix(x_train, label=y_train)
-        self.gbdt = xgb.train(self.param, dtrain, self.nrounds)
-
-    def predict(self, x):
-        return self.gbdt.predict(xgb.DMatrix(x))
-
-xgb_params = {
-    'seed': 0,
-    'colsample_bytree': 0.7,
-    'silent': 1,
-    'subsample': 0.7,
-    'learning_rate': 0.075,
-    'objective': 'reg:linear',
-    'max_depth': 4,
-    'num_parallel_tree': 1,
-    'min_child_weight': 1,
-    'eval_metric': 'rmse',
-    'nrounds': 500
-}
-
-def get_oof(model): # get best set up out of folds of cross validation
-    oof_train = np.zeros((ntrain,))
-    oof_test = np.zeros((ntest,))
-    oof_test_skf = np.empty((NFOLDS, ntest))
-
-    for i, (train_index, test_index) in enumerate(kf):
-        x_tr = x_train[train_index]
-        y_tr = y_train[train_index]
-        x_te = x_train[test_index]
-
-        model.train(x_tr, y_tr)
-
-        oof_train[test_index] = model.predict(x_te)
-        oof_test_skf[i, :] = model.predict(x_test)
-
-    oof_test[:] = oof_test_skf.mean(axis=0)
-    return oof_train.reshape(-1, 1), oof_test.reshape(-1, 1)
-
-#xg = XgbWrapper(seed=SEED, params=xgb_params)
-#xg_oof_train, xg_oof_test = get_oof(xg)
+df = df.drop("anticip_dag", 1) ## removes anticipation time from dataset (optional drop for now)
+df.to_csv(os.path.join(__location__, 'LISS_bedtime_final.csv'))
