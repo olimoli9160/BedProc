@@ -4,7 +4,7 @@ import numpy as np  # linear algebra library
 import xgboost as xgb  # ensemble boosted tree model (don't have to import this yet!)
 import pandas as pd  # data processing library, converts data into data frames and allows for manipulation of these frames
 from sklearn.cross_validation import train_test_split, KFold
-from sklearn.metrics import mean_squared_error
+from sklearn.metrics import mean_squared_error, mean_absolute_error
 from sklearn.linear_model import Ridge, Lasso, LinearRegression
 import matplotlib as plt
 import os
@@ -136,22 +136,31 @@ rd_oof_train, rd_oof_test = get_oof(rd)
 ls_oof_train, ls_oof_test = get_oof(ls)
 lr_oof_train, lr_oof_test = get_oof(lr)
 
-print("Linear Regression Results:") # RMSE = Root mean squared error
+print("Linear Regression Results:") # RMSE = Root mean squared error, MAE = Mean Absolute Error
 print("LR-CV RMSE: {}".format(sqrt(mean_squared_error(y_train, lr_oof_train))))
-print("LR-Test RMSE: {}".format(sqrt(mean_squared_error(y_test, lr_oof_test)))+"\n")
+print("LR-CV MAE: {}".format(mean_absolute_error(y_train, lr_oof_train)))
+print("LR-Test RMSE: {}".format(sqrt(mean_squared_error(y_test, lr_oof_test))))
+print("LR-Test MAE: {}".format(mean_absolute_error(y_test, lr_oof_test))+"\n")
+
 
 
 print("XGBoost Results:")
 print("XG-CV RMSE: {}".format(sqrt(mean_squared_error(y_train, xg_oof_train))))
-print("XG-Test RMSE: {}".format(sqrt(mean_squared_error(y_test, xg_oof_test)))+"\n")
+print("XG-CV MAE: {}".format(mean_absolute_error(y_train, xg_oof_train)))
+print("XG-Test RMSE: {}".format(sqrt(mean_squared_error(y_test, xg_oof_test))))
+print("XG-Test MAE: {}".format(mean_absolute_error(y_test, xg_oof_test))+"\n")
 
 
 print("Ridge Results:")
 print("RD-CV RMSE: {}".format(sqrt(mean_squared_error(y_train, rd_oof_train))))
-print("RD-Test RMSE: {}".format(sqrt(mean_squared_error(y_test, rd_oof_test)))+"\n")
+print("RD-CV MAE: {}".format(mean_absolute_error(y_train, rd_oof_train)))
+print("RD-Test RMSE: {}".format(sqrt(mean_squared_error(y_test, rd_oof_test))))
+print("RD-Test MAE: {}".format(mean_absolute_error(y_test, rd_oof_test))+"\n")
 
 
 print("Lasso Results:")
 print("LS-CV RMSE: {}".format(sqrt(mean_squared_error(y_train, ls_oof_train))))
-print("LS-Test RMSE: {}".format(sqrt(mean_squared_error(y_test, ls_oof_test)))+"\n")
+print("LS-CV MAE: {}".format(mean_absolute_error(y_train, ls_oof_train)))
+print("LS-Test RMSE: {}".format(sqrt(mean_squared_error(y_test, ls_oof_test))))
+print("LS-Test MAE: {}".format(mean_absolute_error(y_test, ls_oof_test))+"\n")
 
