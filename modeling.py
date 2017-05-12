@@ -9,6 +9,7 @@ from sklearn.linear_model import Ridge, Lasso, LinearRegression
 import matplotlib as plt
 import os
 from math import sqrt
+import math
 
 TARGET = "Verschil_bedtijd_dag"
 NFOLDS = 5
@@ -100,7 +101,7 @@ ls_params={
 }
 
 lr_params={
-    'normalize': True
+  #  'normalize': True
 }
 
 #----------------- Cross-Validation Mdoel Selection -----------------------------#
@@ -131,36 +132,74 @@ rd = SklearnWrapper(model=Ridge, seed=SEED, params=rd_params)
 ls = SklearnWrapper(model=Lasso, seed=SEED, params=ls_params)
 lr = SklearnWrapper(model=LinearRegression, seed=SEED, params=lr_params)
 
+lr_oof_train, lr_oof_test = get_oof(lr)
 xg_oof_train, xg_oof_test = get_oof(xg)
 rd_oof_train, rd_oof_test = get_oof(rd)
 ls_oof_train, ls_oof_test = get_oof(ls)
-lr_oof_train, lr_oof_test = get_oof(lr)
 
-print("Linear Regression Results:") # RMSE = Root mean squared error, MAE = Mean Absolute Error
+
+#------------------------ Results --------------------------#
+
+resultTrainDf = pd.DataFrame()
+resultTestDf = pd.DataFrame()
+
+resultTrainDf['Actual_Train'] = y_train
+resultTrainDf['LR_Pred_Train'] = lr_oof_train
+resultTrainDf['XG_Pred_Train'] = xg_oof_train
+resultTrainDf['RD_Pred_Train'] = rd_oof_train
+resultTrainDf['LS_Pred_Train'] = ls_oof_train
+
+resultTestDf['Actual_Test'] = y_test
+resultTestDf['LR_Pred_Test'] = lr_oof_test
+resultTestDf['XG_Pred_Test'] = xg_oof_test
+resultTestDf['RD_Pred_Test'] = rd_oof_test
+resultTestDf['LS_Pred_Test'] = ls_oof_test
+
+resultTrainDf = np.exp(resultTrainDf[:])-1
+resultTestDf = np.exp(resultTestDf[:])-1
+
+print(resultTrainDf)
+print(resultTestDf)
+print('\n')
+
+def mape(a, b): # Mean absolute percentage error
+    mask = a != 0
+    return (np.fabs(a[mask] - b[mask])/a[mask]).mean() # returned value is a percentage
+
+print("Linear Regression Results:") # RMSE = Root mean squared error, MAE = Mean Absolute Error, MAPE = Mean Absolute Percent Error
 print("LR-CV RMSE: {}".format(sqrt(mean_squared_error(y_train, lr_oof_train))))
 print("LR-CV MAE: {}".format(mean_absolute_error(y_train, lr_oof_train)))
+print("LR-CV MAPE: {}%".format(round(mape(resultTrainDf["Actual_Train"], resultTrainDf["LR_Pred_Train"].values), 2))+"\n")
+
 print("LR-Test RMSE: {}".format(sqrt(mean_squared_error(y_test, lr_oof_test))))
-print("LR-Test MAE: {}".format(mean_absolute_error(y_test, lr_oof_test))+"\n")
-
-
+print("LR-Test MAE: {}".format(mean_absolute_error(y_test, lr_oof_test)))
+print("LR-Test MAPE: {}%".format(round(mape(resultTestDf["Actual_Test"], resultTestDf["LR_Pred_Test"].values), 2))+"\n")
 
 print("XGBoost Results:")
 print("XG-CV RMSE: {}".format(sqrt(mean_squared_error(y_train, xg_oof_train))))
 print("XG-CV MAE: {}".format(mean_absolute_error(y_train, xg_oof_train)))
-print("XG-Test RMSE: {}".format(sqrt(mean_squared_error(y_test, xg_oof_test))))
-print("XG-Test MAE: {}".format(mean_absolute_error(y_test, xg_oof_test))+"\n")
+print("XG-CV MAPE: {}%".format(round(mape(resultTrainDf["Actual_Train"], resultTrainDf["XG_Pred_Train"].values), 2))+"\n")
 
+print("XG-Test RMSE: {}".format(sqrt(mean_squared_error(y_test, xg_oof_test))))
+print("XG-Test MAE: {}".format(mean_absolute_error(y_test, xg_oof_test)))
+print("XG-Test MAPE: {}%".format(round(mape(resultTestDf["Actual_Test"], resultTestDf["XG_Pred_Test"].values), 2))+"\n")
 
 print("Ridge Results:")
 print("RD-CV RMSE: {}".format(sqrt(mean_squared_error(y_train, rd_oof_train))))
 print("RD-CV MAE: {}".format(mean_absolute_error(y_train, rd_oof_train)))
-print("RD-Test RMSE: {}".format(sqrt(mean_squared_error(y_test, rd_oof_test))))
-print("RD-Test MAE: {}".format(mean_absolute_error(y_test, rd_oof_test))+"\n")
+print("RD-CV MAPE: {}%".format(round(mape(resultTrainDf["Actual_Train"], resultTrainDf["RD_Pred_Train"].values), 2))+"\n")
 
+print("RD-Test RMSE: {}".format(sqrt(mean_squared_error(y_test, rd_oof_test))))
+print("RD-Test MAE: {}".format(mean_absolute_error(y_test, rd_oof_test)))
+print("RD-Test MAPE: {}%".format(round(mape(resultTestDf["Actual_Test"], resultTestDf["RD_Pred_Test"].values), 2))+"\n")
 
 print("Lasso Results:")
 print("LS-CV RMSE: {}".format(sqrt(mean_squared_error(y_train, ls_oof_train))))
 print("LS-CV MAE: {}".format(mean_absolute_error(y_train, ls_oof_train)))
+print("LS-CV MAPE: {}%".format(round(mape(resultTrainDf["Actual_Train"], resultTrainDf["LR_Pred_Train"].values), 2))+"\n")
+
 print("LS-Test RMSE: {}".format(sqrt(mean_squared_error(y_test, ls_oof_test))))
-print("LS-Test MAE: {}".format(mean_absolute_error(y_test, ls_oof_test))+"\n")
+print("LS-Test MAE: {}".format(mean_absolute_error(y_test, ls_oof_test)))
+print("LS-Test MAPE: {}%".format(round(mape(resultTestDf["Actual_Test"], resultTestDf["LS_Pred_Test"].values), 2))+"\n")
+
 
