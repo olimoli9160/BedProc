@@ -38,6 +38,7 @@ print("Full Dataset size: " + str(round(df.shape[0] /5)) + " participants\n")
 #-----------------------------Split Dataframe into Train and Test Sets------------------------------#
 targets = df[TARGET]
 
+
 def splitOnParticipants(dataframe, train_size):
     num_participants = dataframe.shape[0] / 5 # number of days
     split = round((num_participants * train_size) * 5)
@@ -50,6 +51,53 @@ def splitOnParticipants(dataframe, train_size):
     print("Test Set size: " + str(test.shape[0]) + " rows")
     print("Test Set size: " + str(round(test.shape[0] / 5)) + " participants\n")
 
+    return train, test
+
+def customStratifiedSampling(dataframe, train_size, y):
+    y2 = y.to_frame()
+
+    #------- Makes 3 dataframes containing target values classified into high medium and low------------#
+    low = y2.loc[y2[TARGET] < 60] # value here is rough(although pretty close) estimate, can be choosen more intelligently via histogram analysis
+    med = y2.loc[(60 <= y2[TARGET]) & (y2[TARGET] < 120)]
+    high = y2.loc[y2[TARGET] >= 120]
+
+    lowIdxs = low.index.values.tolist()
+    medIdxs = med.index.values.tolist()
+    highIdxs = high.index.values.tolist()
+
+    lowDF = dataframe.loc[dataframe.index.isin(lowIdxs)] # partitions actual dataset by matching low target values with their respective listing
+    medDF = dataframe.loc[dataframe.index.isin(medIdxs)]
+    highDF = dataframe.loc[dataframe.index.isin(highIdxs)]
+
+    lowTrain = lowDF.sample(frac=0.8, random_state=1) # select 80% of values from each partition of the dataset (still based on classified target values)
+    medTrain = medDF.sample(frac=0.8, random_state=1)
+    highTrain = highDF.sample(frac=0.8, random_state=1) # ...this should ensure frequency remains the same, the math checks out
+
+    trainingFrames = [lowTrain,medTrain,highTrain]
+    train = pd.concat(trainingFrames)
+
+    trainingIndexes = train.index.values.tolist()
+    test = dataframe.loc[~dataframe.index.isin(trainingIndexes)] # test set is built from remaining listings not included in training set
+
+
+    #------- for checking frequency of low, med, high remains during split -------#
+    #freqLow = len(low) / y.shape[0]
+    #freqMed = len(med) / y.shape[0]
+    #freqHigh = len(high) / y.shape[0]
+
+    #freLowTr = lowTrain.shape[0] / train.shape[0]
+    #freMedTr = medTrain.shape[0] / train.shape[0]
+    #freHighTr = highTrain.shape[0] / train.shape[0]
+
+    #print(str(freqLow) + " : "+ str(freLowTr))
+    #print(str(freqMed) + " : "+ str(freMedTr))
+    #print(str(freqHigh) + " : "+ str(freHighTr))
+
+    print("Training Set size: " + str(train.shape[0]) + " rows")
+    print("Training Set size: " + str(round(train.shape[0] / 5)) + " participants\n")
+
+    print("Test Set size: " + str(test.shape[0]) + " rows")
+    print("Test Set size: " + str(round(test.shape[0] / 5)) + " participants\n")
     return train, test
 
 
@@ -70,13 +118,16 @@ def splitOnDay(dataframe, dayNumber):
     return train, test
 
 run = 1
-while(run <= 2): # log all modelling runs
+while(run <= 3): # log all modelling runs
 
     print("\nModeling Run: "+str(run)+"\n")
-    if run < 2:
-        train, test = splitOnParticipants(df, 0.7)
-    else:
+    if run == 1:
+        train, test = splitOnParticipants(df, 0.8)
+    elif run == 2:
         train, test = splitOnDay(df, 5)
+    elif run == 3:
+        train, test = customStratifiedSampling(df, 0.8, targets)
+
     y_train = train[TARGET]
     y_test = test[TARGET]
     print("Value Range of dependent variable (Verschil_bedtijd_dag) in Training Set: " + str(y_train.min()) + " - " + str(y_train.max())+"\n")
@@ -109,6 +160,8 @@ while(run <= 2): # log all modelling runs
         def predict(self, x):
             return self.gbdt.predict(xgb.DMatrix(x))
 
+
+
     class SklearnWrapper(object):
         def __init__(self, model, seed=0, params=None):
             if model != LinearRegression:
@@ -121,6 +174,7 @@ while(run <= 2): # log all modelling runs
         def predict(self, x):
             return self.model.predict(x)
 
+
     #--------------------- Specific Model Parameteres -------------------------#
 
     xgb_params = {
@@ -128,14 +182,15 @@ while(run <= 2): # log all modelling runs
         'colsample_bytree': 0.7,
         'silent': 1,
         'subsample': 0.7,
-        'learning_rate': 0.1,
+        'learning_rate': 0.05,
+        'gamma': 0,
         'objective': 'reg:linear',
-        'max_depth': 6,
+        'max_depth': 7,
         'num_parallel_tree': 1,
         'min_child_weight': 1,
         'eval_metric': 'rmse',
         'nrounds': 500,
-        "booster": "gblinear"
+        'booster': 'gblinear',
     }
 
     rd_params={
