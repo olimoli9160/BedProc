@@ -24,6 +24,7 @@ data_file = os.path.join(__location__, 'LISS_bedtime_final.csv')
 
 df = pd.read_csv(data_file)
 df = df.drop("Unnamed: 0", 1) # drop redundant indexing
+#print(df)
 
 ##### Droping those entries which have 0.0 for procrastination time##### Models performed considerably worse
 #df = df.loc[df[TARGET] != 0.0]
@@ -136,6 +137,8 @@ while(run <= 3): # log all modelling runs
     train.drop([TARGET], axis=1, inplace=True)
     test.drop([TARGET], axis=1, inplace=True)
 
+    feature_names = list(train.columns) # used for coefficient mapping
+
     ntrain = train.shape[0]
     ntest = test.shape[0]
 
@@ -144,7 +147,6 @@ while(run <= 3): # log all modelling runs
     #print("X_train listings: "+ str(x_train.shape[0]) + "   X_test listings: " + str(x_test.shape[0]))
 
     kf = KFold(ntrain, n_folds=NFOLDS, shuffle=True, random_state=SEED)
-
 
     #---------------------- Model Constructors -------------------------------#
     class XgbWrapper(object):
@@ -160,6 +162,8 @@ while(run <= 3): # log all modelling runs
         def predict(self, x):
             return self.gbdt.predict(xgb.DMatrix(x))
 
+        def coef(self):
+            print("XGB hates me")
 
 
     class SklearnWrapper(object):
@@ -170,6 +174,10 @@ while(run <= 3): # log all modelling runs
 
         def train(self, x_train, y_train):
             self.model.fit(x_train, y_train)
+            self.coef_ = self.model.coef_
+            self.coef_ = {}
+            for coef, feat in zip(self.model.coef_, feature_names):
+                self.coef_[feat] = coef
 
         def predict(self, x):
             return self.model.predict(x)
@@ -211,7 +219,7 @@ while(run <= 3): # log all modelling runs
     def crossValidationModels(model): # get best setup out of folds of cross validation
         best_train = np.zeros((ntrain,))
         best_test = np.zeros((ntest,))
-        best_test_skf = np.empty((NFOLDS, ntest)) # mean of values per fold (stratified k-fold)
+        best_test_skf = np.empty((NFOLDS, ntest)) # best model containing mean of predicted values per fold on test data (stratified k-fold)
 
         for fold, (train_index, test_index) in enumerate(kf):
             x_tr = x_train[train_index]
@@ -226,18 +234,28 @@ while(run <= 3): # log all modelling runs
             best_train[test_index] = model.predict(x_te)
             best_test_skf[fold, :] = model.predict(x_test)
 
-        best_test[:] = best_test_skf.mean(axis=0)
-        return best_train.reshape(-1, 1), best_test.reshape(-1, 1)
+        best_test[:] = best_test_skf.mean(axis=0) # stratified cv model of test predictions
+        return model, best_train.reshape(-1, 1), best_test.reshape(-1, 1)
 
     xg = XgbWrapper(seed=SEED, params=xgb_params)
     rd = SklearnWrapper(model=Ridge, seed=SEED, params=rd_params)
     ls = SklearnWrapper(model=Lasso, seed=SEED, params=ls_params)
     lr = SklearnWrapper(model=LinearRegression, seed=SEED, params=lr_params)
 
-    lr_oof_train, lr_oof_test = crossValidationModels(lr)
-    xg_oof_train, xg_oof_test = crossValidationModels(xg)
-    rd_oof_train, rd_oof_test = crossValidationModels(rd)
-    ls_oof_train, ls_oof_test = crossValidationModels(ls)
+    lr_model, lr_train, lr_test = crossValidationModels(lr)
+    xg_model, xg_train, xg_test = crossValidationModels(xg)
+    rd_model, rd_train, rd_test = crossValidationModels(rd)
+    ls_model, ls_train, ls_test = crossValidationModels(ls)
+
+    lr_coef = pd.DataFrame(lr_model.coef_, index=["Linear Regression"])
+    rd_coef = pd.DataFrame(rd_model.coef_, index=["Ridge Regression"])
+    ls_coef = pd.DataFrame(ls_model.coef_, index=["Lasso Regression"])
+
+    coef_frames = [lr_coef, rd_coef, ls_coef]
+    coefDf = pd.concat(coef_frames)
+    print("Predictor Coefficients of current run: (XGBoost Excluded for now...)\n")
+    print(coefDf)
+    print("\n")
 
 
     #------------------------ Results --------------------------#
@@ -246,58 +264,58 @@ while(run <= 3): # log all modelling runs
     resultTestDf = pd.DataFrame()
 
     resultTrainDf['Actual_Train'] = y_train
-    resultTrainDf['LR_Pred_Train'] = lr_oof_train
-    resultTrainDf['XG_Pred_Train'] = xg_oof_train
-    resultTrainDf['RD_Pred_Train'] = rd_oof_train
-    resultTrainDf['LS_Pred_Train'] = ls_oof_train
+    resultTrainDf['LR_Pred_Train'] = lr_train
+    resultTrainDf['XG_Pred_Train'] = xg_train
+    resultTrainDf['RD_Pred_Train'] = rd_train
+    resultTrainDf['LS_Pred_Train'] = ls_train
 
     resultTestDf['Actual_Test'] = y_test
-    resultTestDf['LR_Pred_Test'] = lr_oof_test
-    resultTestDf['XG_Pred_Test'] = xg_oof_test
-    resultTestDf['RD_Pred_Test'] = rd_oof_test
-    resultTestDf['LS_Pred_Test'] = ls_oof_test
+    resultTestDf['LR_Pred_Test'] = lr_test
+    resultTestDf['XG_Pred_Test'] = xg_test
+    resultTestDf['RD_Pred_Test'] = rd_test
+    resultTestDf['LS_Pred_Test'] = ls_test
 
     print(round(resultTrainDf, 6))
     print(round(resultTestDf, 6))
     print('\n')
 
-    def mape(a, b): # Mean absolute percentage error (I'll write my own version of the function later or cite this one)
-        mask = a != 0
-        return (np.fabs(a[mask] - b[mask])/a[mask]).mean() * 100 # returned value is a percentage
+    def mape(actual, predicted): # Mean absolute percentage error (I'll write my own version of the function later or cite this one)
+        mask = actual != 0
+        return (np.fabs(actual[mask] - predicted[mask])/predicted[mask]).mean() * 100 # returned value is a percentage
 
     print("Linear Regression Results:") # RMSE = Root mean squared error, MAE = Mean Absolute Error, MAPE = Mean Absolute Percent Error
-    print("LR-CV RMSE: {}".format(sqrt(mean_squared_error(y_train, lr_oof_train))))
-    print("LR-CV MAE: {}".format(mean_absolute_error(y_train, lr_oof_train)))
-    print("LR-CV MAPE: {}%".format(round(mape(resultTrainDf["Actual_Train"], resultTrainDf["LR_Pred_Train"]), 2))+"\n")
+    print("LR-Train RMSE: {}".format(sqrt(mean_squared_error(y_train, lr_train))))
+    print("LR-Train MAE: {}".format(mean_absolute_error(y_train, lr_train)))
+    print("LR-Train MAPE: {}%".format(round(mape(resultTrainDf["Actual_Train"], resultTrainDf["LR_Pred_Train"]), 2))+"\n")
 
-    print("LR-Test RMSE: {}".format(sqrt(mean_squared_error(y_test, lr_oof_test))))
-    print("LR-Test MAE: {}".format(mean_absolute_error(y_test, lr_oof_test)))
+    print("LR-Test RMSE: {}".format(sqrt(mean_squared_error(y_test, lr_test))))
+    print("LR-Test MAE: {}".format(mean_absolute_error(y_test, lr_test)))
     print("LR-Test MAPE: {}%".format(round(mape(resultTestDf["Actual_Test"], resultTestDf["LR_Pred_Test"]), 2))+"\n")
 
     print("XGBoost Results:")
-    print("XG-CV RMSE: {}".format(sqrt(mean_squared_error(y_train, xg_oof_train))))
-    print("XG-CV MAE: {}".format(mean_absolute_error(y_train, xg_oof_train)))
-    print("XG-CV MAPE: {}%".format(round(mape(resultTrainDf["Actual_Train"], resultTrainDf["XG_Pred_Train"]), 2))+"\n")
+    print("XG-Train RMSE: {}".format(sqrt(mean_squared_error(y_train, xg_train))))
+    print("XG-Train MAE: {}".format(mean_absolute_error(y_train, xg_train)))
+    print("XG-Train MAPE: {}%".format(round(mape(resultTrainDf["Actual_Train"], resultTrainDf["XG_Pred_Train"]), 2))+"\n")
 
-    print("XG-Test RMSE: {}".format(sqrt(mean_squared_error(y_test, xg_oof_test))))
-    print("XG-Test MAE: {}".format(mean_absolute_error(y_test, xg_oof_test)))
+    print("XG-Test RMSE: {}".format(sqrt(mean_squared_error(y_test, xg_test))))
+    print("XG-Test MAE: {}".format(mean_absolute_error(y_test, xg_test)))
     print("XG-Test MAPE: {}%".format(round(mape(resultTestDf["Actual_Test"], resultTestDf["XG_Pred_Test"]), 2))+"\n")
 
     print("Ridge Results:")
-    print("RD-CV RMSE: {}".format(sqrt(mean_squared_error(y_train, rd_oof_train))))
-    print("RD-CV MAE: {}".format(mean_absolute_error(y_train, rd_oof_train)))
-    print("RD-CV MAPE: {}%".format(round(mape(resultTrainDf["Actual_Train"], resultTrainDf["RD_Pred_Train"]), 2))+"\n")
+    print("RD-Train RMSE: {}".format(sqrt(mean_squared_error(y_train, rd_train))))
+    print("RD-Train MAE: {}".format(mean_absolute_error(y_train, rd_train)))
+    print("RD-Train MAPE: {}%".format(round(mape(resultTrainDf["Actual_Train"], resultTrainDf["RD_Pred_Train"]), 2))+"\n")
 
-    print("RD-Test RMSE: {}".format(sqrt(mean_squared_error(y_test, rd_oof_test))))
-    print("RD-Test MAE: {}".format(mean_absolute_error(y_test, rd_oof_test)))
+    print("RD-Test RMSE: {}".format(sqrt(mean_squared_error(y_test, rd_test))))
+    print("RD-Test MAE: {}".format(mean_absolute_error(y_test, rd_test)))
     print("RD-Test MAPE: {}%".format(round(mape(resultTestDf["Actual_Test"], resultTestDf["RD_Pred_Test"]), 2))+"\n")
 
     print("Lasso Results:")
-    print("LS-CV RMSE: {}".format(sqrt(mean_squared_error(y_train, ls_oof_train))))
-    print("LS-CV MAE: {}".format(mean_absolute_error(y_train, ls_oof_train)))
-    print("LS-CV MAPE: {}%".format(round(mape(resultTrainDf["Actual_Train"], resultTrainDf["LR_Pred_Train"]), 2))+"\n")
+    print("LS-Train RMSE: {}".format(sqrt(mean_squared_error(y_train, ls_train))))
+    print("LS-Train MAE: {}".format(mean_absolute_error(y_train, ls_train)))
+    print("LS-Train MAPE: {}%".format(round(mape(resultTrainDf["Actual_Train"], resultTrainDf["LR_Pred_Train"]), 2))+"\n")
 
-    print("LS-Test RMSE: {}".format(sqrt(mean_squared_error(y_test, ls_oof_test))))
-    print("LS-Test MAE: {}".format(mean_absolute_error(y_test, ls_oof_test)))
+    print("LS-Test RMSE: {}".format(sqrt(mean_squared_error(y_test, ls_test))))
+    print("LS-Test MAE: {}".format(mean_absolute_error(y_test, ls_test)))
     print("LS-Test MAPE: {}%".format(round(mape(resultTestDf["Actual_Test"], resultTestDf["LS_Pred_Test"]), 2))+"\n")
     run += 1

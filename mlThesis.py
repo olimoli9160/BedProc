@@ -398,6 +398,10 @@ df["Procrastinated_Prev_dag"] = 0 # binary feature indicating whether participan
 df["Early_To_Bed_Prev_dag"] = 0 # binary feature indicating whether participant went to sleep earlier than expected previous day
 df["Media_Usage_dag"] = 0 # binary feature indicating whether participant used media before attempting to sleep
 df["dag_Number"] = 0
+df["Bezigheid_Work"] = 0
+df["Bezigheid_Study"] = 0
+df["Bezigheid_Household"] = 0
+df["Bezigheid_Free_Time"] = 0
 
 def rebuild_with_Derived_Proc_Features(data):
     altered = 0 # refers to index of entry currently being altered
@@ -442,6 +446,16 @@ def rebuild_with_Derived_Proc_Features(data):
                 current.ix[altered, attribute] = attributeValue # creates the new generic attribute and gives value of specific day
                 current = current.drop(actualAttributeString, 1) # removes now obsolete day attributes from each listing
 
+            #------ Convert categorical feature bezigheid_dag into 4 binary features-------#
+            if current.ix[altered, "Bezigheid_dag"] == 1.0:
+                current.ix[altered, "Bezigheid_Work"] = 1
+            elif current.ix[altered, "Bezigheid_dag"] == 2.0:
+                current.ix[altered, "Bezigheid_Study"] = 1
+            elif current.ix[altered, "Bezigheid_dag"] == 3.0:
+                current.ix[altered, "Bezigheid_Household"] = 1
+            elif current.ix[altered, "Bezigheid_dag"] == 4.0:
+                current.ix[altered, "Bezigheid_Free_Time"] = 1
+
             altered += 1 # current entry alteration finished, increment to next full datset index
             day += 1 # increments to next day of week
 
@@ -451,4 +465,5 @@ def rebuild_with_Derived_Proc_Features(data):
 copy_df = df.copy(deep=True)
 df = rebuild_with_Derived_Proc_Features(copy_df)
 df = df.drop("anticip_dag", 1) ## removes anticipation time from dataset (optional drop for now)
+df = df.drop("Bezigheid_dag", 1)
 df.to_csv(os.path.join(__location__, 'LISS_bedtime_final.csv'))
