@@ -328,14 +328,14 @@ df["anticip_dag5"] = 0
 df["anticip_dag6"] = 0
 df["anticip_dag7"] = 0
 
-anticipAttributes = [
-    "anticip_dag1",
-    "anticip_dag2",
-    "anticip_dag3",
-    "anticip_dag4",
-    "anticip_dag5",
-    "anticip_dag6",
-    "anticip_dag7"]
+#anticipAttributes = [
+#    "anticip_dag1",
+#    "anticip_dag2",
+#    "anticip_dag3",
+#    "anticip_dag4",
+#    "anticip_dag5",
+#    "anticip_dag6",
+#    "anticip_dag7"]
 
 externGeldigAttributes = [
     "Extern_dag1_geldig",
@@ -433,9 +433,9 @@ def rebuild_with_Derived_Proc_Features(data):
             prevProc = currentProc
             currentProc += float(current.iloc[[day]][actualProcrastinationPerDay[day]].values) # increase proc by current day's actual proc value
 
-            if current.ix[altered, actualProcrastinationPerDay[day]] < 0: # Separate days procrastinated from days not
-                current.ix[altered, anticipAttributes[day]] = (current.ix[altered, actualProcrastinationPerDay[day]] * -1)
-                current.ix[altered, actualProcrastinationPerDay[day]] = 0
+           # if current.ix[altered, actualProcrastinationPerDay[day]] < 0: # Separate days procrastinated from days not
+           #     current.ix[altered, anticipAttributes[day]] = (current.ix[altered, actualProcrastinationPerDay[day]] * -1)
+           #     current.ix[altered, actualProcrastinationPerDay[day]] = 0
 
             totalProc += float(current.iloc[[day]][actualProcrastinationPerDay[day]].values) # increase total proc so far based on days procrastinated
 
@@ -466,4 +466,5 @@ copy_df = df.copy(deep=True)
 df = rebuild_with_Derived_Proc_Features(copy_df)
 df = df.drop("anticip_dag", 1) ## removes anticipation time from dataset (optional drop for now)
 df = df.drop("Bezigheid_dag", 1)
+#print(df)
 df.to_csv(os.path.join(__location__, 'LISS_bedtime_final.csv'))

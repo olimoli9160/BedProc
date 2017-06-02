@@ -6,9 +6,74 @@ import pandas as pd  # data processing library, converts data into data frames a
 from sklearn.cross_validation import train_test_split, KFold
 from sklearn.metrics import mean_squared_error, mean_absolute_error
 from sklearn.linear_model import Ridge, Lasso, LinearRegression
+from sklearn.feature_selection import SelectFromModel
 import matplotlib as plt
 import os
 from math import sqrt
+
+# ---------------------- Model Constructors -------------------------------#
+class XgbWrapper(object):
+    def __init__(self, seed=0, params=None):
+        self.param = params
+        self.param['seed'] = seed
+        self.nrounds = params.pop('nrounds', 250)
+
+    def train(self, x_train, y_train):
+        dtrain = xgb.DMatrix(x_train, label=y_train)
+        self.gbdt = xgb.train(self.param, dtrain, self.nrounds)
+
+    def predict(self, x):
+        return self.gbdt.predict(xgb.DMatrix(x))
+
+    def coef(self):
+        print("XGB hates me")
+
+
+class SklearnWrapper(object):
+    def __init__(self, model, seed=0, params=None):
+        if model != LinearRegression:
+            params['random_state'] = seed
+        self.model = model(**params)
+
+    def train(self, x_train, y_train):
+        self.model.fit(x_train, y_train)
+        self.coef_ = self.model.coef_
+        self.coefs = dict(zip(feature_names, self.model.coef_))
+
+    def predict(self, x):
+        return self.model.predict(x)
+
+
+# --------------------- Specific Model Parameteres -------------------------#
+
+xgb_params = {
+    'seed': 0,
+    'colsample_bytree': 0.7,
+    'silent': 1,
+    'subsample': 0.7,
+    'learning_rate': 0.05,
+    'gamma': 0,
+    'objective': 'reg:linear',
+    'max_depth': 7,
+    'num_parallel_tree': 1,
+    'min_child_weight': 1,
+    'eval_metric': 'rmse',
+    'nrounds': 500,
+    'booster': 'gblinear',
+}
+
+rd_params = {
+    'alpha': 10
+}
+
+ls_params = {
+    'alpha': 0.05,
+    'max_iter': 100000
+}
+
+lr_params = {
+    'normalize': True
+}
 
 TARGET = "Verschil_bedtijd_dag"
 NFOLDS = 5
@@ -24,7 +89,6 @@ data_file = os.path.join(__location__, 'LISS_bedtime_final.csv')
 
 df = pd.read_csv(data_file)
 df = df.drop("Unnamed: 0", 1) # drop redundant indexing
-#print(df)
 
 ##### Droping those entries which have 0.0 for procrastination time##### Models performed considerably worse
 #df = df.loc[df[TARGET] != 0.0]
@@ -36,10 +100,25 @@ print("Full Dataset size: " + str(df.shape[0]) + " rows")
 print("Full Dataset size: " + str(round(df.shape[0] /5)) + " participants\n")
 
 
-#-----------------------------Split Dataframe into Train and Test Sets------------------------------#
+#-------------------------- L1 Feature Selection (Lasso) -------------------------#
 targets = df[TARGET]
+data = df.drop(TARGET,1)
+feature_names = list(data.columns) # used for coefficient mapping
+
+lassoFS = SklearnWrapper(model=Lasso, seed=SEED, params=ls_params)
+lassoFS.train(data, targets)
+model = SelectFromModel(lassoFS, prefit=True)
+feature_idx = model.get_support()
+selectedFeatures = data.columns[feature_idx]
+print("Viable Features for Modeling: ")
+print(selectedFeatures.tolist())
+data_new = data[selectedFeatures]
+feature_names = list(data_new.columns) # update feature name list to selected features
+data_new[TARGET] = targets
+df = data_new
 
 
+#-----------------------------Split Dataframe into Train and Test Sets------------------------------#
 def splitOnParticipants(dataframe, train_size):
     num_participants = dataframe.shape[0] / 5 # number of days
     split = round((num_participants * train_size) * 5)
@@ -54,27 +133,52 @@ def splitOnParticipants(dataframe, train_size):
 
     return train, test
 
+def splitOnDay(dataframe, dayNumber):
+    train = pd.DataFrame()
+    test = pd.DataFrame()
+    for i in range(1, dataframe.shape[0]):
+        if i % dayNumber == 0:
+            test = test.append(dataframe.ix[i-1])
+        else:
+            train = train.append(dataframe.ix[i-1])
+
+    print("Training Set size: " + str(train.shape[0]) + " rows")
+    print("Training Set size: " + str(round(train.shape[0] / 5)) + " participants\n")
+
+    print("Test Set size: " + str(test.shape[0]) + " rows")
+    print("Test Set size: " + str(round(test.shape[0] / 5)) + " participants\n")
+    return train, test
+
 def customStratifiedSampling(dataframe, train_size, y):
     y2 = y.to_frame()
 
-    #------- Makes 3 dataframes containing target values classified into high medium and low------------#
-    low = y2.loc[y2[TARGET] < 60] # value here is rough(although pretty close) estimate, can be choosen more intelligently via histogram analysis
+    #------- Makes 4 dataframes containing target values classified into high medium low and none------------#
+    none = y2.loc[y2[TARGET] <= 0]
+    low = y2.loc[(0 < y2[TARGET]) & (y2[TARGET] < 60)] # value here is rough(although pretty close) estimate, can be choosen more intelligently via histogram analysis
     med = y2.loc[(60 <= y2[TARGET]) & (y2[TARGET] < 120)]
     high = y2.loc[y2[TARGET] >= 120]
 
+    noneIdxs = none.index.values.tolist()
     lowIdxs = low.index.values.tolist()
     medIdxs = med.index.values.tolist()
     highIdxs = high.index.values.tolist()
 
+    noneDF = dataframe.loc[dataframe.index.isin(noneIdxs)]
     lowDF = dataframe.loc[dataframe.index.isin(lowIdxs)] # partitions actual dataset by matching low target values with their respective listing
     medDF = dataframe.loc[dataframe.index.isin(medIdxs)]
     highDF = dataframe.loc[dataframe.index.isin(highIdxs)]
 
-    lowTrain = lowDF.sample(frac=0.8, random_state=1) # select 80% of values from each partition of the dataset (still based on classified target values)
-    medTrain = medDF.sample(frac=0.8, random_state=1)
-    highTrain = highDF.sample(frac=0.8, random_state=1) # ...this should ensure frequency remains the same, the math checks out
+    noneDF['procLabel'] = 0
+    lowDF['procLabel'] = 1
+    medDF['procLabel'] = 2
+    highDF['procLabel'] = 3
 
-    trainingFrames = [lowTrain,medTrain,highTrain]
+    noneTrain = noneDF.sample(frac=0.6, random_state=1)
+    lowTrain = lowDF.sample(frac=0.6, random_state=1) # select 80% of values from each partition of the dataset (still based on classified target values)
+    medTrain = medDF.sample(frac=0.9, random_state=1)
+    highTrain = highDF.sample(frac=0.95, random_state=1) # ...this should ensure frequency remains the same, the math checks out
+
+    trainingFrames = [noneTrain, lowTrain, medTrain, highTrain]
     train = pd.concat(trainingFrames)
 
     trainingIndexes = train.index.values.tolist()
@@ -82,34 +186,23 @@ def customStratifiedSampling(dataframe, train_size, y):
 
 
     #------- for checking frequency of low, med, high remains during split -------#
+    #freqNone = len(none) / y.shape[0]
     #freqLow = len(low) / y.shape[0]
     #freqMed = len(med) / y.shape[0]
     #freqHigh = len(high) / y.shape[0]
 
+    #freNoneTr = noneTrain.shape[0] / train.shape[0]
     #freLowTr = lowTrain.shape[0] / train.shape[0]
     #freMedTr = medTrain.shape[0] / train.shape[0]
     #freHighTr = highTrain.shape[0] / train.shape[0]
 
+    #print(str(freqNone) + " : "+ str(freNoneTr))
     #print(str(freqLow) + " : "+ str(freLowTr))
     #print(str(freqMed) + " : "+ str(freMedTr))
     #print(str(freqHigh) + " : "+ str(freHighTr))
 
-    print("Training Set size: " + str(train.shape[0]) + " rows")
-    print("Training Set size: " + str(round(train.shape[0] / 5)) + " participants\n")
-
-    print("Test Set size: " + str(test.shape[0]) + " rows")
-    print("Test Set size: " + str(round(test.shape[0] / 5)) + " participants\n")
-    return train, test
-
-
-def splitOnDay(dataframe, dayNumber):
-    train = pd.DataFrame()
-    test = pd.DataFrame()
-    for i in range(0, dataframe.shape[0]):
-        if i % dayNumber == 0:
-            test = test.append(dataframe.ix[i])
-        else:
-            train = train.append(dataframe.ix[i])
+    #print("Training Set size: " + str(train.shape[0]) + " rows")
+    #print("Training Set size: " + str(round(train.shape[0] / 5)) + " participants\n")
 
     print("Training Set size: " + str(train.shape[0]) + " rows")
     print("Training Set size: " + str(round(train.shape[0] / 5)) + " participants\n")
@@ -118,6 +211,8 @@ def splitOnDay(dataframe, dayNumber):
     print("Test Set size: " + str(round(test.shape[0] / 5)) + " participants\n")
     return train, test
 
+
+## ---------------------------------- CORE MODELING ROUTINE ------------------------------------##
 run = 1
 while(run <= 3): # log all modelling runs
 
@@ -127,6 +222,7 @@ while(run <= 3): # log all modelling runs
     elif run == 2:
         train, test = splitOnDay(df, 5)
     elif run == 3:
+        df['procLabel'] = 0
         train, test = customStratifiedSampling(df, 0.8, targets)
 
     y_train = train[TARGET]
@@ -137,8 +233,6 @@ while(run <= 3): # log all modelling runs
     train.drop([TARGET], axis=1, inplace=True)
     test.drop([TARGET], axis=1, inplace=True)
 
-    feature_names = list(train.columns) # used for coefficient mapping
-
     ntrain = train.shape[0]
     ntest = test.shape[0]
 
@@ -147,72 +241,6 @@ while(run <= 3): # log all modelling runs
     #print("X_train listings: "+ str(x_train.shape[0]) + "   X_test listings: " + str(x_test.shape[0]))
 
     kf = KFold(ntrain, n_folds=NFOLDS, shuffle=True, random_state=SEED)
-
-    #---------------------- Model Constructors -------------------------------#
-    class XgbWrapper(object):
-        def __init__(self, seed=0, params=None):
-            self.param = params
-            self.param['seed'] = seed
-            self.nrounds = params.pop('nrounds', 250)
-
-        def train(self, x_train, y_train):
-            dtrain = xgb.DMatrix(x_train, label=y_train)
-            self.gbdt = xgb.train(self.param, dtrain, self.nrounds)
-
-        def predict(self, x):
-            return self.gbdt.predict(xgb.DMatrix(x))
-
-        def coef(self):
-            print("XGB hates me")
-
-
-    class SklearnWrapper(object):
-        def __init__(self, model, seed=0, params=None):
-            if model != LinearRegression:
-                params['random_state'] = seed
-            self.model = model(**params)
-
-        def train(self, x_train, y_train):
-            self.model.fit(x_train, y_train)
-            self.coef_ = self.model.coef_
-            self.coef_ = {}
-            for coef, feat in zip(self.model.coef_, feature_names):
-                self.coef_[feat] = coef
-
-        def predict(self, x):
-            return self.model.predict(x)
-
-
-    #--------------------- Specific Model Parameteres -------------------------#
-
-    xgb_params = {
-        'seed': 0,
-        'colsample_bytree': 0.7,
-        'silent': 1,
-        'subsample': 0.7,
-        'learning_rate': 0.05,
-        'gamma': 0,
-        'objective': 'reg:linear',
-        'max_depth': 7,
-        'num_parallel_tree': 1,
-        'min_child_weight': 1,
-        'eval_metric': 'rmse',
-        'nrounds': 500,
-        'booster': 'gblinear',
-    }
-
-    rd_params={
-        'alpha': 10
-    }
-
-    ls_params={
-        'alpha': 0.05,
-        'max_iter': 100000
-    }
-
-    lr_params={
-        'normalize': True
-    }
 
     #----------------- Cross-Validation Mdoel Selection -----------------------------#
 
@@ -247,9 +275,9 @@ while(run <= 3): # log all modelling runs
     rd_model, rd_train, rd_test = crossValidationModels(rd)
     ls_model, ls_train, ls_test = crossValidationModels(ls)
 
-    lr_coef = pd.DataFrame(lr_model.coef_, index=["Linear Regression"])
-    rd_coef = pd.DataFrame(rd_model.coef_, index=["Ridge Regression"])
-    ls_coef = pd.DataFrame(ls_model.coef_, index=["Lasso Regression"])
+    lr_coef = pd.DataFrame(lr_model.coefs, index=["Linear Regression"])
+    rd_coef = pd.DataFrame(rd_model.coefs, index=["Ridge Regression"])
+    ls_coef = pd.DataFrame(ls_model.coefs, index=["Lasso Regression"])
 
     coef_frames = [lr_coef, rd_coef, ls_coef]
     coefDf = pd.concat(coef_frames)
@@ -281,7 +309,7 @@ while(run <= 3): # log all modelling runs
 
     def mape(actual, predicted): # Mean absolute percentage error (I'll write my own version of the function later or cite this one)
         mask = actual != 0
-        return (np.fabs(actual[mask] - predicted[mask])/predicted[mask]).mean() * 100 # returned value is a percentage
+        return (np.fabs(actual[mask] - predicted[mask])/actual[mask]).mean() * 100 # returned value is a percentage
 
     print("Linear Regression Results:") # RMSE = Root mean squared error, MAE = Mean Absolute Error, MAPE = Mean Absolute Percent Error
     print("LR-Train RMSE: {}".format(sqrt(mean_squared_error(y_train, lr_train))))
