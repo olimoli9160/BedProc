@@ -67,7 +67,7 @@ rd_params = {
 }
 
 ls_params = {
-    'alpha': 0.05,
+    'alpha': 0.1,
     'max_iter': 100000
 }
 
@@ -149,7 +149,7 @@ def splitOnDay(dataframe, dayNumber):
     print("Test Set size: " + str(round(test.shape[0] / 5)) + " participants\n")
     return train, test
 
-def customStratifiedSampling(dataframe, train_size, y):
+def customStratifiedSampling(dataframe, y):
     y2 = y.to_frame()
 
     #------- Makes 4 dataframes containing target values classified into high medium low and none------------#
@@ -223,7 +223,8 @@ while(run <= 3): # log all modelling runs
         train, test = splitOnDay(df, 5)
     elif run == 3:
         df['procLabel'] = 0
-        train, test = customStratifiedSampling(df, 0.8, targets)
+        train, test = customStratifiedSampling(df, targets)
+
 
     y_train = train[TARGET]
     y_test = test[TARGET]
