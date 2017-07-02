@@ -9,6 +9,7 @@ from sklearn.linear_model import Lasso
 from sklearn.feature_selection import SelectFromModel
 import matplotlib as plt
 import os
+import math
 
 # ---------------------- Model Constructors -------------------------------#
 class XgbWrapper(object):
@@ -17,15 +18,13 @@ class XgbWrapper(object):
         self.param['seed'] = seed
         self.nrounds = params.pop('nrounds', 250)
 
-    def train(self, x_train, y_train):
-        dtrain = xgb.DMatrix(x_train, label=y_train)
+    def train(self, x_train, y_train, weights):
+        dtrain = xgb.DMatrix(x_train, label=y_train, weight=weights)
         self.gbdt = xgb.train(self.param, dtrain, self.nrounds)
 
     def predict(self, x):
         return self.gbdt.predict(xgb.DMatrix(x))
 
-    def coef(self):
-        print("XGB hates me")
 
 class SklearnWrapper(object):
     def __init__(self, model, seed=0, params=None):
@@ -112,28 +111,34 @@ def customStratifiedSampling(dataframe, y):
     medDF['procLabel'] = 2
     highDF['procLabel'] = 3
 
+    labeledData = [noneDF, lowDF, medDF, highDF]
+
+    dfWithLabels = pd.concat(labeledData)
+
     noneTrain = noneDF.sample(frac=0.6, random_state=1)
     lowTrain = lowDF.sample(frac=0.6, random_state=1) # select 80% of values from each partition of the dataset (still based on classified target values)
     medTrain = medDF.sample(frac=0.9, random_state=1)
-    highTrain = highDF.sample(frac=0.95, random_state=1) # ...this should ensure frequency remains the same, the math checks out
+    highTrain = highDF.sample(frac=0.9, random_state=1) # ...this should ensure frequency remains the same, the math checks out
 
     trainingFrames = [noneTrain, lowTrain, medTrain, highTrain]
     train = pd.concat(trainingFrames)
 
     trainingIndexes = train.index.values.tolist()
-    test = dataframe.loc[~dataframe.index.isin(trainingIndexes)] # test set is built from remaining listings not included in training set
+    test = dfWithLabels.loc[~dfWithLabels.index.isin(trainingIndexes)] # test set is built from remaining listings not included in training set
+
+    weights = np.array((train.procLabel ** 10)+1 * 0.01)
 
     print("Training Set size: " + str(train.shape[0]) + " rows")
     print("Training Set size: " + str(round(train.shape[0] / 5)) + " participants\n")
 
     print("Test Set size: " + str(test.shape[0]) + " rows")
     print("Test Set size: " + str(round(test.shape[0] / 5)) + " participants\n")
-    return train, test
+    return train, test, weights
 
 
 ## ---------------------------------- CORE MODELING ROUTINE ------------------------------------##
 
-train, test = customStratifiedSampling(df, proc_values)
+train, test, weighting = customStratifiedSampling(df, proc_values)
 df = pd.concat([train, test])
 df = df.drop(BIN_DEPENDENCY, 1)
 df = df.sort_index()
@@ -182,7 +187,7 @@ def crossValidationModels(model): # get best setup out of folds of cross validat
         y_tr = targets[train_index]
         x_te = x_train[test_index]
 
-        model.train(x_tr, y_tr)
+        model.train(x_tr, y_tr, weighting)
 
         best_train[test_index] = model.predict(x_te)
         best_test[:] = model.predict(x_test)
@@ -211,3 +216,13 @@ print('\n')
 print("XGBoost Results:")
 print("XG-Train Accuracy: {}%".format(round((accuracy_score(y_train, xg_train)*100), 2)))
 print("XG-Test Accuracy: {}%".format(round((accuracy_score(y_test, xg_test)*100), 2)))
+
+noDF = resultTestDf.loc[(resultTestDf.Actual_Test == 0)]
+lowDF = resultTestDf.loc[(resultTestDf.Actual_Test == 1)]
+medDF = resultTestDf.loc[(resultTestDf.Actual_Test == 2)]
+highDF = resultTestDf.loc[(resultTestDf.Actual_Test == 3)]
+
+print("XG-Test No Accuracy: {}%".format(round((accuracy_score(noDF.Actual_Test, noDF.XG_Pred_Test)*100), 2)))
+print("XG-Test Low Accuracy: {}%".format(round((accuracy_score(lowDF.Actual_Test, lowDF.XG_Pred_Test)*100), 2)))
+print("XG-Test Med Accuracy: {}%".format(round((accuracy_score(medDF.Actual_Test, medDF.XG_Pred_Test)*100), 2)))
+print("XG-Test High Accuracy: {}%".format(round((accuracy_score(highDF.Actual_Test, highDF.XG_Pred_Test)*100), 2)))

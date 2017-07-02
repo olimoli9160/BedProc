@@ -7,7 +7,7 @@ from sklearn.cross_validation import train_test_split, KFold
 from sklearn.metrics import mean_squared_error, mean_absolute_error
 from sklearn.linear_model import Ridge, Lasso, LinearRegression
 from sklearn.feature_selection import SelectFromModel
-import matplotlib as plt
+import matplotlib.pyplot as plt
 import os
 from math import sqrt
 
@@ -25,8 +25,6 @@ class XgbWrapper(object):
     def predict(self, x):
         return self.gbdt.predict(xgb.DMatrix(x))
 
-    def coef(self):
-        print("XGB hates me")
 
 
 class SklearnWrapper(object):
@@ -90,15 +88,9 @@ data_file = os.path.join(__location__, 'LISS_bedtime_final.csv')
 df = pd.read_csv(data_file)
 df = df.drop("Unnamed: 0", 1) # drop redundant indexing
 
-##### Droping those entries which have 0.0 for procrastination time##### Models performed considerably worse
-#df = df.loc[df[TARGET] != 0.0]
-#df = df.reset_index(drop=True)
-#print(df.shape[0])
-
 print("Dataset, Test, and Train Set Specifications: ")
 print("Full Dataset size: " + str(df.shape[0]) + " rows")
 print("Full Dataset size: " + str(round(df.shape[0] /5)) + " participants\n")
-
 
 #-------------------------- L1 Feature Selection (Lasso) -------------------------#
 targets = df[TARGET]
@@ -117,6 +109,15 @@ feature_names = list(data_new.columns) # update feature name list to selected fe
 data_new[TARGET] = targets
 df = data_new
 
+plt.rcParams["figure.figsize"] = (15, 15)
+
+axs = targets.hist(bins=[-60, 0.001, 60, 120, 180])
+vals = axs.get_yticks()
+axs.set_yticklabels(['{:.0f}'.format((x)) for x in vals])
+plt.xlabel("Procrastination (in Minutes)", size=18)
+plt.ylabel("Number of Listings", size = 18)
+plt.title("Histogram of Target Variable (4 bins)", size=24, verticalalignment ="bottom")
+plt.show()
 
 #-----------------------------Split Dataframe into Train and Test Sets------------------------------#
 def splitOnParticipants(dataframe, train_size):
@@ -173,16 +174,19 @@ def customStratifiedSampling(dataframe, y):
     medDF['procLabel'] = 2
     highDF['procLabel'] = 3
 
-    noneTrain = noneDF.sample(frac=0.6, random_state=1)
-    lowTrain = lowDF.sample(frac=0.6, random_state=1) # select 80% of values from each partition of the dataset (still based on classified target values)
-    medTrain = medDF.sample(frac=0.9, random_state=1)
-    highTrain = highDF.sample(frac=0.95, random_state=1) # ...this should ensure frequency remains the same, the math checks out
+    labeledData = [noneDF, lowDF, medDF, highDF]
+    dfWithLabels = pd.concat(labeledData)
+
+    noneTrain = noneDF.sample(frac=0.8, random_state=1)
+    lowTrain = lowDF.sample(frac=0.8, random_state=1) # select 80% of values from each partition of the dataset (still based on classified target values)
+    medTrain = medDF.sample(frac=0.8, random_state=1)
+    highTrain = highDF.sample(frac=0.8, random_state=1) # ...this should ensure frequency remains the same, the math checks out
 
     trainingFrames = [noneTrain, lowTrain, medTrain, highTrain]
     train = pd.concat(trainingFrames)
 
     trainingIndexes = train.index.values.tolist()
-    test = dataframe.loc[~dataframe.index.isin(trainingIndexes)] # test set is built from remaining listings not included in training set
+    test = dfWithLabels.loc[~dfWithLabels.index.isin(trainingIndexes)] # test set is built from remaining listings not included in training set
 
 
     #------- for checking frequency of low, med, high remains during split -------#
@@ -230,6 +234,7 @@ while(run <= 3): # log all modelling runs
     y_test = test[TARGET]
     print("Value Range of dependent variable (Verschil_bedtijd_dag) in Training Set: " + str(y_train.min()) + " - " + str(y_train.max())+"\n")
     print("Standard Deviation of dependent variable (Verschil_bedtijd_dag) in Training Set: "+str(y_train.std())+'\n')
+    print("Mean value of target variable: " + str(y_train.mean())+'\n')
 
     train.drop([TARGET], axis=1, inplace=True)
     test.drop([TARGET], axis=1, inplace=True)
@@ -239,7 +244,6 @@ while(run <= 3): # log all modelling runs
 
     x_train = np.array(train)
     x_test = np.array(test)
-    #print("X_train listings: "+ str(x_train.shape[0]) + "   X_test listings: " + str(x_test.shape[0]))
 
     kf = KFold(ntrain, n_folds=NFOLDS, shuffle=True, random_state=SEED)
 
@@ -285,6 +289,17 @@ while(run <= 3): # log all modelling runs
     print("Predictor Coefficients of current run: (XGBoost Excluded for now...)\n")
     print(coefDf)
     print("\n")
+
+    #------------------------- Plotting of Feature Importance -----------------------------------#
+    ls_coef = ls_coef.sort(columns=ls_coef.index[:10].tolist(), axis=1, ascending=False)
+    row = ls_coef.ix[0]
+    print(row)
+    ax = row.plot(kind='bar')
+    plt.xlabel("Features", size=18)
+    plt.ylabel("Feature Coefficient", size=18)
+    plt.title("Feature Importance: Run " + str(run), size=24, verticalalignment="bottom")
+    plt.xticks(horizontalalignment = "right", rotation=45)
+    plt.show()
 
 
     #------------------------ Results --------------------------#

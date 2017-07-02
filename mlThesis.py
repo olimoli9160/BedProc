@@ -13,7 +13,6 @@ __location__ = os.path.realpath(os.path.join(os.getcwd(), os.path.dirname(__file
 data_file = os.path.join(__location__, 'LISS_bedtime.csv')
 
 df = pd.read_csv(data_file)
-#print(df)
 
 #----- Drop Unusable Data (already been transformed in another manner) -----#
 df = df.drop("Reason4_nl", 1)
@@ -214,11 +213,6 @@ slaapAttributesWithEffectAttribute = [
     ['Slaap4', 'Slaap4a'],
     ['Slaap5', 'Slaap5a']]
 
-#partnerAttributes = [
-#    "Bedtijd_partner_dag1",
-#    "Slaaptijd_partner_dag1",
-#    "Opstaan_partner"]
-
 bedtimeProcV2Attributes = [
     "v2.bedproc1",
     "v2.bedproc2",
@@ -242,7 +236,7 @@ actualProcrastinationPerDay = [
     "Verschil_bedtijd_dag4",
     "Verschil_bedtijd_dag5",
     "Verschil_bedtijd_dag6",  # weekend
-    "Verschil_bedtijd_dag7"] # weekend
+    "Verschil_bedtijd_dag7"]  # weekend
 
 mediaAttributes = [
     "TV_dag",
@@ -466,5 +460,4 @@ copy_df = df.copy(deep=True)
 df = rebuild_with_Derived_Proc_Features(copy_df)
 df = df.drop("anticip_dag", 1) ## removes anticipation time from dataset (optional drop for now)
 df = df.drop("Bezigheid_dag", 1)
-#print(df)
-df.to_csv(os.path.join(__location__, 'LISS_bedtime_final.csv'))
+#df.to_csv(os.path.join(__location__, 'LISS_bedtime_final.csv'))   ## save reformatted dataset
